@@ -13,22 +13,25 @@ class TestImageOpsUsm(PillowTestCase):
     def test_ops_api(self):
 
         i = self.assert_warning(DeprecationWarning,
-            ImageOps.gaussian_blur, im, 2.0)
+                                ImageOps.gaussian_blur, im, 2.0)
+        self.assertEqual(i.mode, "RGB")
+        self.assertEqual(i.size, (128, 128))
+
+        i = self.assert_warning(DeprecationWarning, ImageOps.box_blur, im, 1)
+        self.assertEqual(i.mode, "RGB")
+        self.assertEqual(i.size, (128, 128))
+
+        i = self.assert_warning(DeprecationWarning, ImageOps.gblur, im, 2.0)
         self.assertEqual(i.mode, "RGB")
         self.assertEqual(i.size, (128, 128))
 
         i = self.assert_warning(DeprecationWarning,
-            ImageOps.gblur, im, 2.0)
+                                ImageOps.unsharp_mask, im, 2.0, 125, 8)
         self.assertEqual(i.mode, "RGB")
         self.assertEqual(i.size, (128, 128))
 
         i = self.assert_warning(DeprecationWarning,
-            ImageOps.unsharp_mask, im, 2.0, 125, 8)
-        self.assertEqual(i.mode, "RGB")
-        self.assertEqual(i.size, (128, 128))
-
-        i = self.assert_warning(DeprecationWarning,
-            ImageOps.usm, im, 2.0, 125, 8)
+                                ImageOps.usm, im, 2.0, 125, 8)
         self.assertEqual(i.mode, "RGB")
         self.assertEqual(i.size, (128, 128))
 
@@ -96,6 +99,7 @@ class TestImageOpsUsm(PillowTestCase):
         self.assertTrue(236 <= gp(8, 5)[2] <= 239)
         self.assertTrue(236 <= gp(8, 6)[2] <= 239)
         self.assertTrue(236 <= gp(8, 7)[1] <= 239)
+
 
 if __name__ == '__main__':
     unittest.main()

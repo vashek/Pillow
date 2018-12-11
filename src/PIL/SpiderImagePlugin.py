@@ -51,6 +51,7 @@ def isInt(f):
     except (ValueError, OverflowError):
         return 0
 
+
 iforms = [1, 3, -11, -12, -21, -22]
 
 
@@ -73,7 +74,6 @@ def isSpiderHeader(t):
     labrec = int(h[13])   # no. records in file header
     labbyt = int(h[22])   # total no. of bytes in header
     lenbyt = int(h[23])   # record length in bytes
-    # print("labrec = %d, labbyt = %d, lenbyt = %d" % (labrec,labbyt,lenbyt))
     if labbyt != (labrec * lenbyt):
         return 0
     # looks like a valid header
@@ -120,7 +120,7 @@ class SpiderImageFile(ImageFile.ImageFile):
         if iform != 1:
             raise SyntaxError("not a Spider 2D image")
 
-        self.size = int(h[12]), int(h[2])  # size in pixels (width, height)
+        self._size = int(h[12]), int(h[2])  # size in pixels (width, height)
         self.istack = int(h[24])
         self.imgnumber = int(h[27])
 
@@ -199,7 +199,7 @@ class SpiderImageFile(ImageFile.ImageFile):
 
 # given a list of filenames, return a list of images
 def loadImageSeries(filelist=None):
-    " create a list of Image.images for use in montage "
+    """create a list of Image.images for use in montage"""
     if filelist is None or len(filelist) < 1:
         return
 
@@ -278,6 +278,7 @@ def _save_spider(im, fp, filename):
     _save(im, fp, filename)
 
 # --------------------------------------------------------------------
+
 
 Image.register_open(SpiderImageFile.format, SpiderImageFile)
 Image.register_save(SpiderImageFile.format, _save_spider)

@@ -38,6 +38,7 @@ import struct
 
 from . import Image, ImageFile, ImagePalette
 from ._binary import i8, i16be as i16, i32be as i32, o16be as o16, o32be as o32
+from ._util import py3
 
 __version__ = "0.9"
 
@@ -84,6 +85,7 @@ def _safe_zlib_decompress(s):
     if dobj.unconsumed_tail:
         raise ValueError("Decompressed Data Too Large")
     return plaintext
+
 
 def _crc32(data, seed=0):
     return zlib.crc32(data, seed) & 0xffffffff
@@ -140,7 +142,8 @@ class ChunkStream(object):
     def crc(self, cid, data):
         "Read and verify checksum"
 
-        # Skip CRC checks for ancillary chunks if allowed to load truncated images
+        # Skip CRC checks for ancillary chunks if allowed to load truncated
+        # images
         # 5th byte of first char is 1 [specs, section 5.4]
         if ImageFile.LOAD_TRUNCATED_IMAGES and (i8(cid[0]) >> 5 & 1):
             self.crc_skip(cid, data)
@@ -299,8 +302,8 @@ class PngStream(ChunkStream):
     def check_text_memory(self, chunklen):
         self.text_memory += chunklen
         if self.text_memory > MAX_TEXT_MEMORY:
-            raise ValueError("Too much memory used in text chunks: %s>MAX_TEXT_MEMORY" %
-                             self.text_memory)
+            raise ValueError("Too much memory used in text chunks: "
+                             "%s>MAX_TEXT_MEMORY" % self.text_memory)
 
     def chunk_iCCP(self, pos, length):
 
@@ -436,7 +439,7 @@ class PngStream(ChunkStream):
             k = s
             v = b""
         if k:
-            if bytes is not str:
+            if py3:
                 k = k.decode('latin-1', 'strict')
                 v = v.decode('latin-1', 'replace')
 
@@ -472,7 +475,7 @@ class PngStream(ChunkStream):
             v = b""
 
         if k:
-            if bytes is not str:
+            if py3:
                 k = k.decode('latin-1', 'strict')
                 v = v.decode('latin-1', 'replace')
 
@@ -509,7 +512,7 @@ class PngStream(ChunkStream):
                     return s
             else:
                 return s
-        if bytes is not str:
+        if py3:
             try:
                 k = k.decode("latin-1", "strict")
                 lang = lang.decode("utf-8", "strict")
@@ -574,7 +577,7 @@ class PngImageFile(ImageFile.ImageFile):
         # (believe me, I've tried ;-)
 
         self.mode = self.png.im_mode
-        self.size = self.png.im_size
+        self._size = self.png.im_size
         self.info = self.png.im_info
         self.text = self.png.im_text  # experimental
         self.tile = self.png.im_tile
@@ -662,7 +665,7 @@ _OUTMODES = {
 
 
 def putchunk(fp, cid, *data):
-    "Write a PNG chunk (including CRC field)"
+    """Write a PNG chunk (including CRC field)"""
 
     data = b"".join(data)
 
@@ -750,7 +753,7 @@ def _save(im, fp, filename, chunk=putchunk):
         name = b"ICC Profile"
         data = name + b"\0\0" + zlib.compress(icc)
         chunk(fp, b"iCCP", data)
-        
+
         # You must either have sRGB or iCCP.
         # Disallow sRGB chunks when an iCCP-chunk has been emitted.
         chunks.remove(b"sRGB")

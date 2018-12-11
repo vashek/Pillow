@@ -68,12 +68,18 @@ class PyAccess(object):
         numerical value for single band images, and a tuple for
         multi-band images
 
-        :param xy: The pixel coordinate, given as (x, y).
+        :param xy: The pixel coordinate, given as (x, y). See
+           :ref:`coordinate-system`.
         :param color: The pixel value.
         """
         if self.readonly:
             raise ValueError('Attempt to putpixel a read only image')
-        (x, y) = self.check_xy(xy)
+        (x, y) = xy
+        if x < 0:
+            x = self.xsize + x
+        if y < 0:
+            y = self.ysize + y
+        (x, y) = self.check_xy((x, y))
         return self.set_pixel(x, y, color)
 
     def __getitem__(self, xy):
@@ -82,12 +88,17 @@ class PyAccess(object):
         value for single band images or a tuple for multiple band
         images
 
-        :param xy: The pixel coordinate, given as (x, y).
+        :param xy: The pixel coordinate, given as (x, y). See
+          :ref:`coordinate-system`.
         :returns: a pixel value for single band images, a tuple of
           pixel values for multiband images.
         """
-
-        (x, y) = self.check_xy(xy)
+        (x, y) = xy
+        if x < 0:
+            x = self.xsize + x
+        if y < 0:
+            y = self.ysize + y
+        (x, y) = self.check_xy((x, y))
         return self.get_pixel(x, y)
 
     putpixel = __setitem__

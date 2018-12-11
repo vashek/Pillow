@@ -26,7 +26,7 @@ from setuptools import Extension, setup
 import mp_compile
 
 
-if sys.platform == "win32" and sys.version_info >= (3, 7):
+if sys.platform == "win32" and sys.version_info >= (3, 8):
     warnings.warn(
         "Pillow does not yet support Python {}.{} and does not yet provide "
         "prebuilt Windows binaries. We do not recommend building from "
@@ -39,17 +39,17 @@ _IMAGING = ("decode", "encode", "map", "display", "outline", "path")
 
 _LIB_IMAGING = (
     "Access", "AlphaComposite", "Resample", "Bands", "BcnDecode", "BitDecode",
-    "Blend", "Chops", "Convert", "ConvertYCbCr", "Copy", "Crop",
+    "Blend", "Chops", "ColorLUT", "Convert", "ConvertYCbCr", "Copy", "Crop",
     "Dib", "Draw", "Effects", "EpsEncode", "File", "Fill", "Filter",
     "FliDecode", "Geometry", "GetBBox", "GifDecode", "GifEncode", "HexDecode",
     "Histo", "JpegDecode", "JpegEncode", "Matrix", "ModeFilter",
     "Negative", "Offset", "Pack", "PackDecode", "Palette", "Paste", "Quant",
     "QuantOctree", "QuantHash", "QuantHeap", "PcdDecode", "PcxDecode",
     "PcxEncode", "Point", "RankFilter", "RawDecode", "RawEncode", "Storage",
-    "SgiRleDecode", "SunRleDecode", "TgaRleDecode", "Unpack", "UnpackYCC",
-    "UnsharpMask", "XbmDecode", "XbmEncode", "ZipDecode", "ZipEncode",
-    "TiffDecode", "Jpeg2KDecode", "Jpeg2KEncode", "BoxBlur", "QuantPngQuant",
-    "codec_fd")
+    "SgiRleDecode", "SunRleDecode", "TgaRleDecode", "TgaRleEncode", "Unpack",
+    "UnpackYCC", "UnsharpMask", "XbmDecode", "XbmEncode", "ZipDecode",
+    "ZipEncode", "TiffDecode", "Jpeg2KDecode", "Jpeg2KEncode", "BoxBlur",
+    "QuantPngQuant", "codec_fd")
 
 DEBUG = False
 
@@ -122,7 +122,7 @@ def _read(file):
 
 
 def get_version():
-    version_file = 'src/PIL/version.py'
+    version_file = 'src/PIL/_version.py'
     with open(version_file, 'r') as f:
         exec(compile(f.read(), version_file, 'exec'))
     return locals()['__version__']
@@ -191,10 +191,11 @@ class pil_build_ext(build_ext):
         ('disable-platform-guessing', None,
          'Disable platform guessing on Linux'),
         ('debug', None, 'Debug logging')
-    ]
+    ] + [('add-imaging-libs=', None, 'Add libs to _imaging build')]
 
     def initialize_options(self):
         self.disable_platform_guessing = None
+        self.add_imaging_libs = ""
         build_ext.initialize_options(self)
         for x in self.feature:
             setattr(self, 'disable_%s' % x, None)
@@ -205,6 +206,12 @@ class pil_build_ext(build_ext):
         if self.debug:
             global DEBUG
             DEBUG = True
+        if sys.version_info >= (3, 5) and not self.parallel:
+            # For Python < 3.5, we monkeypatch distutils to have parallel
+            # builds. If --parallel (or -j) wasn't specified, we want to
+            # reproduce the same behavior as before, that is, auto-detect the
+            # number of jobs.
+            self.parallel = mp_compile.MAX_PROCS
         for x in self.feature:
             if getattr(self, 'disable_%s' % x):
                 setattr(self.feature, x, False)
@@ -358,8 +365,10 @@ class pil_build_ext(build_ext):
                     'aarch64': ["/usr/lib64", "/usr/lib/aarch64-linux-gnu"],
                     'arm':     ["/usr/lib/arm-linux-gnueabi"],
                     'armv71':  ["/usr/lib/arm-linux-gnueabi"],
+                    'armv7l':  ["/usr/lib"],
                     'ppc64':   ["/usr/lib64", "/usr/lib/ppc64-linux-gnu",
                                 "/usr/lib/powerpc64-linux-gnu"],
+                    'ppc64le':   ["/usr/lib64"],
                     'ppc':     ["/usr/lib/ppc-linux-gnu",
                                 "/usr/lib/powerpc-linux-gnu"],
                     's390x':   ["/usr/lib64", "/usr/lib/s390x-linux-gnu"],
@@ -368,7 +377,7 @@ class pil_build_ext(build_ext):
 
                 for platform_ in arch_tp:
                     dirs = libdirs.get(platform_, None)
-                    if not platform_:
+                    if not dirs:
                         continue
                     for path in dirs:
                         _add_directory(library_dirs, path)
@@ -422,7 +431,8 @@ class pil_build_ext(build_ext):
             best_path = None
             for name in os.listdir(program_files):
                 if name.startswith('OpenJPEG '):
-                    version = tuple(int(x) for x in name[9:].strip().split('.'))
+                    version = tuple(int(x) for x in
+                                    name[9:].strip().split('.'))
                     if version > best_version:
                         best_version = version
                         best_path = os.path.join(program_files, name)
@@ -499,7 +509,8 @@ class pil_build_ext(build_ext):
                 # possible.
                 _add_directory(self.compiler.include_dirs, best_path, 0)
                 feature.jpeg2000 = 'openjp2'
-                feature.openjpeg_version = '.'.join(str(x) for x in best_version)
+                feature.openjpeg_version = '.'.join(str(x) for x in
+                                                    best_version)
 
         if feature.want('imagequant'):
             _dbg('Looking for imagequant')
@@ -514,9 +525,7 @@ class pil_build_ext(build_ext):
             if _find_include_file(self, 'tiff.h'):
                 if _find_library_file(self, "tiff"):
                     feature.tiff = "tiff"
-                if sys.platform == "win32" and _find_library_file(self, "libtiff"):
-                    feature.tiff = "libtiff"
-                if (sys.platform == "darwin" and
+                if (sys.platform in ["win32", "darwin"] and
                         _find_library_file(self, "libtiff")):
                     feature.tiff = "libtiff"
 
@@ -526,21 +535,22 @@ class pil_build_ext(build_ext):
                 # look for freetype2 include files
                 freetype_version = 0
                 for subdir in self.compiler.include_dirs:
-                    _dbg('Checking for include file %s in %s', ("ft2build.h", subdir))
+                    _dbg('Checking for include file %s in %s',
+                         ("ft2build.h", subdir))
                     if os.path.isfile(os.path.join(subdir, "ft2build.h")):
                         _dbg('Found %s in %s', ("ft2build.h", subdir))
                         freetype_version = 21
                         subdir = os.path.join(subdir, "freetype2")
                         break
                     subdir = os.path.join(subdir, "freetype2")
-                    _dbg('Checking for include file %s in %s', ("ft2build.h", subdir))
+                    _dbg('Checking for include file %s in %s',
+                         ("ft2build.h", subdir))
                     if os.path.isfile(os.path.join(subdir, "ft2build.h")):
                         _dbg('Found %s in %s', ("ft2build.h", subdir))
                         freetype_version = 21
                         break
                 if freetype_version:
                     feature.freetype = "freetype"
-                    feature.freetype_version = freetype_version
                     if subdir:
                         _add_directory(self.compiler.include_dirs, subdir, 0)
 
@@ -589,7 +599,7 @@ class pil_build_ext(build_ext):
         for src_file in _LIB_IMAGING:
             files.append(os.path.join("src/libImaging", src_file + ".c"))
 
-        libs = []
+        libs = self.add_imaging_libs.split()
         defs = []
         if feature.jpeg:
             libs.append(feature.jpeg)
@@ -761,7 +771,7 @@ try:
           long_description=_read('README.rst').decode('utf-8'),
           author='Alex Clark (Fork Author)',
           author_email='aclark@aclark.net',
-          url='https://python-pillow.org',
+          url='http://python-pillow.org',
           classifiers=[
               "Development Status :: 6 - Mature",
               "Topic :: Multimedia :: Graphics",
@@ -776,6 +786,7 @@ try:
               "Programming Language :: Python :: 3.4",
               "Programming Language :: Python :: 3.5",
               "Programming Language :: Python :: 3.6",
+              "Programming Language :: Python :: 3.7",
               "Programming Language :: Python :: Implementation :: CPython",
               "Programming Language :: Python :: Implementation :: PyPy",
           ],
@@ -786,7 +797,7 @@ try:
           setup_requires=pytest_runner,
           tests_require=['pytest'],
           packages=["PIL"],
-          package_dir={'':'src'},
+          package_dir={'': 'src'},
           keywords=["Imaging", ],
           license='Standard PIL License',
           zip_safe=not (debug_build() or PLATFORM_MINGW), )

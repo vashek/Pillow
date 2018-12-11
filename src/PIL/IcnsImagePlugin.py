@@ -265,12 +265,32 @@ class IcnsImageFile(ImageFile.ImageFile):
     def _open(self):
         self.icns = IcnsFile(self.fp)
         self.mode = 'RGBA'
+        self.info['sizes'] = self.icns.itersizes()
         self.best_size = self.icns.bestsize()
         self.size = (self.best_size[0] * self.best_size[2],
                      self.best_size[1] * self.best_size[2])
-        self.info['sizes'] = self.icns.itersizes()
         # Just use this to see if it's loaded or not yet.
         self.tile = ('',)
+
+    @property
+    def size(self):
+        return self._size
+
+    @size.setter
+    def size(self, value):
+        info_size = value
+        if info_size not in self.info['sizes'] and len(info_size) == 2:
+            info_size = (info_size[0], info_size[1], 1)
+        if info_size not in self.info['sizes'] and len(info_size) == 3 and \
+           info_size[2] == 1:
+            simple_sizes = [(size[0] * size[2], size[1] * size[2])
+                            for size in self.info['sizes']]
+            if value in simple_sizes:
+                info_size = self.info['sizes'][simple_sizes.index(value)]
+        if info_size not in self.info['sizes']:
+            raise ValueError(
+                "This is not one of the allowed sizes of this image")
+        self._size = value
 
     def load(self):
         if len(self.size) == 3:
@@ -310,20 +330,24 @@ def _save(im, fp, filename):
 
     # create the temporary set of pngs
     iconset = tempfile.mkdtemp('.iconset')
+    provided_images = {im.width: im
+                       for im in im.encoderinfo.get("append_images", [])}
     last_w = None
-    last_im = None
+    second_path = None
     for w in [16, 32, 128, 256, 512]:
         prefix = 'icon_{}x{}'.format(w, w)
 
+        first_path = os.path.join(iconset, prefix+'.png')
         if last_w == w:
-            im_scaled = last_im
+            shutil.copyfile(second_path, first_path)
         else:
-            im_scaled = im.resize((w, w), Image.LANCZOS)
-        im_scaled.save(os.path.join(iconset, prefix+'.png'))
+            im_w = provided_images.get(w, im.resize((w, w), Image.LANCZOS))
+            im_w.save(first_path)
 
-        im_scaled = im.resize((w*2, w*2), Image.LANCZOS)
-        im_scaled.save(os.path.join(iconset, prefix+'@2x.png'))
-        last_im = im_scaled
+        second_path = os.path.join(iconset, prefix+'@2x.png')
+        im_w2 = provided_images.get(w*2, im.resize((w*2, w*2), Image.LANCZOS))
+        im_w2.save(second_path)
+        last_w = w*2
 
     # iconutil -c icns -o {} {}
     from subprocess import Popen, PIPE, CalledProcessError
@@ -341,6 +365,7 @@ def _save(im, fp, filename):
 
     if retcode:
         raise CalledProcessError(retcode, convert_cmd)
+
 
 Image.register_open(IcnsImageFile.format, IcnsImageFile,
                     lambda x: x[:4] == b'icns')

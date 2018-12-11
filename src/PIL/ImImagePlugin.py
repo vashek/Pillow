@@ -153,7 +153,7 @@ class ImImageFile(ImageFile.ImageFile):
 
             try:
                 m = split.match(s)
-            except re.error as v:
+            except re.error:
                 raise SyntaxError("not an IM file")
 
             if m:
@@ -196,7 +196,7 @@ class ImImageFile(ImageFile.ImageFile):
             raise SyntaxError("Not an IM file")
 
         # Basic attributes
-        self.size = self.info[SIZE]
+        self._size = self.info[SIZE]
         self.mode = self.info[MODE]
 
         # Skip forward to start of image data
@@ -294,6 +294,7 @@ class ImImageFile(ImageFile.ImageFile):
 # --------------------------------------------------------------------
 # Save IM files
 
+
 SAVE = {
     # mode: (im type, raw mode)
     "1": ("0 1", "1"),
@@ -338,6 +339,7 @@ def _save(im, fp, filename):
 #
 # --------------------------------------------------------------------
 # Registry
+
 
 Image.register_open(ImImageFile.format, ImImageFile)
 Image.register_save(ImImageFile.format, _save)
